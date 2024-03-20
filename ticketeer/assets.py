@@ -91,15 +91,25 @@ def push_grant_log(context: AssetExecutionContext) -> MaterializeResult:
     df["elapsed"] = (today - df["timestamp"]).dt.days
     df["is_expired"] = df["elapsed"] > df["durasi_akses"].str.replace('d', '').astype(int)
 
-    # phase 1: grant access
-    for user in df[~df["is_expired"]].itertuples():
+    # grant/revoke access
+    for user in df.itertuples():
+        # revoke if expired
+        if user.is_expired:
+            context.log.info(f"Revoking access to {user.email} with role {user.role} because it's expired after {user.durasi_akses} days")
+            return
+        
+        # revoke if declined
+        if user.approval == 'DECLINED':
+            context.log.info(f"Revoking access to {user.email} with role {user.role} because it's declined")
+            return
+        
+        # skip if approval is not selected
+        if pd.isna(user.approval):
+            context.log.info(f"Skipping access to {user.email} with role {user.role} because it's not approved yet")
+            return
+
+        # grant access
         context.log.info(f"Granting access to {user.email} with role {user.role} for {user.durasi_akses}")
-        # TODO: grant access
-    
-    # phase 2: revoke expired access
-    for user in df[df["is_expired"]].itertuples():
-        context.log.info(f"Revoking access to {user.email} with role {user.role} for {user.durasi_akses}")
-        # TODO: revoke access
     
     df.to_csv('data/grant_log.csv', index=False)
 
